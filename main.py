@@ -1,4 +1,11 @@
 import argparse
+from money import Money
+
+
+class Currency(Money):
+    def __init__(self, name, amount=None):
+        Money.__init__(self, name, amount)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
