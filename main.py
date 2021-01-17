@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import logging
 
 import aiohttp
 from aiohttp import web
@@ -8,6 +9,9 @@ from money import Money
 
 URL_XML = "https://www.cbr-xml-daily.ru/daily_utf8.xml"
 URL_JSON = 'https://www.cbr-xml-daily.ru/daily_json.js'
+
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class Currency(Money):
@@ -30,6 +34,10 @@ async def fetch_exchange_rates(**kwargs):
     async with aiohttp.ClientSession() as session:
         async with session.get(URL_JSON, allow_redirects=True, ssl=False) as response:
             json_data = await response.json(content_type='application/javascript')
+            if not json_data:
+                logger.critical(f"No data from {URL_JSON}")
+                return
+            logging.info(f"Successful fetch data from {URL_JSON}")
             for currency_obj in currency_objs_list:
                 try:
                     parsed_valute_cost = json_data['Valute'][currency_obj.name.upper()]['Value']
@@ -37,15 +45,20 @@ async def fetch_exchange_rates(**kwargs):
                     ### удаляем валюту, если такой не существует
                     currency_objs_list.remove(currency_obj)
                     del currency_obj
+                if currency_obj.cost is None:  ## меняем первоначальное состояние
+                    currency_obj.cost = parsed_valute_cost
+                    return
                 if parsed_valute_cost != currency_obj.cost:  ## если курс изменился
                     currency_obj.is_changed = True
                     currency_obj.cost = parsed_valute_cost
+                    logger.info(f"New exchange rate for {currency_obj.name} is {parsed_valute_cost}")
 
 
 async def check_changes(**kwargs):
     currency_objs_list = kwargs.get('currency_objs_list')
     for currency_obj in currency_objs_list:
         if currency_obj.is_changed:
+            logger.info(f"{currency_obj.name} is changed amount or exchange rate")
             currency_obj.is_changed = False
 
 
@@ -74,11 +87,11 @@ async def get_amount(request):
 
 @routes.get('/{currency_name}/get')
 async def get_currency_name(request):
-    currency_name = request.match_info['currency_name'].upper()
+    req_currency_name = request.match_info['currency_name'].upper()
     currency_objs_list = request.app['currency_objs_list']
-    current_currency = next(filter(lambda x: x.name == currency_name, currency_objs_list), None)
+    current_currency = next(filter(lambda x: x.name == req_currency_name, currency_objs_list), None)
     if current_currency is None:
-        return web.Response(text=f'Unknown currency: {currency_name}', status=403)
+        return web.Response(text=f'Unknown currency: {req_currency_name}', status=403)
     return web.json_response(
         {"Currency": current_currency.name, "Amount": current_currency.amount, "Cost": current_currency.cost})
 
@@ -139,7 +152,12 @@ if __name__ == '__main__':
     parser.add_argument('--usd', action="store", dest="usd", type=float, help='usd currency amount')
     parser.add_argument('--eur', action="store", dest="eur", type=float, help='eur currency amount')
     parsed_script_args = parser.parse_args()
-    parsed_script_args_dict = parsed_script_args.__dict__
+
+    if parsed_script_args.debug:
+        logger.setLevel(level=logging.DEBUG)
+
+    logger.info(f'Application started with params {parsed_script_args.__dict__}')
+    logger.debug('Debug enabled')
 
     rub = Currency(name='rub', amount=parsed_script_args.rub)
     usd = Currency(name='usd', amount=parsed_script_args.usd)
@@ -148,6 +166,7 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     tasks = [
         loop.create_task(
+            ### TODO: переделать на wait_for с timeout
             repeat(parsed_script_args.period * 60, fetch_exchange_rates, currency_objs_list=[usd, eur])
         ),
         loop.create_task(
