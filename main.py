@@ -1,4 +1,6 @@
 import argparse
+import asyncio
+
 from money import Money
 
 
@@ -19,3 +21,10 @@ if __name__ == '__main__':
     parser.add_argument('--eur', action="store", dest="eur", type=float, help='eur currency amount')
     parsed_script_args = parser.parse_args()
     parsed_script_args_dict = parsed_script_args.__dict__
+
+    loop = asyncio.get_event_loop()
+    tasks = [
+        # будущие задачи
+    ]
+    loop.run_until_complete(asyncio.gather(*tasks))
+    loop.close()
