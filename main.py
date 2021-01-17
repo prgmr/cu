@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import sys
 
 import aiohttp
 from aiohttp import web
@@ -151,38 +152,47 @@ def get_webserver_settings(**kwargs):
 
 
 if __name__ == '__main__':
+    script_arguments_list = sys.argv
+    catched_currencies_list = list(
+        filter(lambda x: len(x) == 5 and x.startswith('--') and x[2:].isalpha(), script_arguments_list))
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--period', action="store", dest="period", required=True, type=int,
                         help='update period in minutes')
     parser.add_argument('--debug', dest="debug", default=False,
                         type=lambda x: (str(x).lower() in ['true', '1', 'y', 'yes']),
                         help='debug enable mode')
-    parser.add_argument('--rub', action="store", dest="rub", type=float, help='rub currency amount')
-    parser.add_argument('--usd', action="store", dest="usd", type=float, help='usd currency amount')
-    parser.add_argument('--eur', action="store", dest="eur", type=float, help='eur currency amount')
+    for currency_arg in catched_currencies_list:
+        cur_name = currency_arg[2:]
+        parser.add_argument(currency_arg, action="store", dest=cur_name, type=float, help=f'{cur_name} currency amount')
+
     parsed_script_args = parser.parse_args()
+    parsed_script_args_dict = parsed_script_args.__dict__
 
     if parsed_script_args.debug:
         logger.setLevel(level=logging.DEBUG)
 
-    logger.info(f'Application started with params {parsed_script_args.__dict__}')
+    logger.info(f'Application started with params {parsed_script_args_dict}')
     logger.debug('Debug enabled')
 
-    rub = Currency(name='rub', amount=parsed_script_args.rub)
-    usd = Currency(name='usd', amount=parsed_script_args.usd)
-    eur = Currency(name='eur', amount=parsed_script_args.eur)
+    currency_objs_list = []
+    for currency_arg in catched_currencies_list:
+        cur_name = currency_arg[2:]
+        currency_objs_list.append(Currency(name=cur_name, amount=parsed_script_args_dict[cur_name]))
+    currency_objs_list_without_RUB = list(filter(lambda x: x.name != 'RUB', currency_objs_list))
 
     loop = asyncio.get_event_loop()
     tasks = [
         loop.create_task(
             ### TODO: переделать на wait_for с timeout
-            repeat(parsed_script_args.period * 60, fetch_exchange_rates, currency_objs_list=[usd, eur])
+            repeat(parsed_script_args.period * 60, fetch_exchange_rates,
+                   currency_objs_list=currency_objs_list_without_RUB)
         ),
         loop.create_task(
-            repeat(60, check_changes, currency_objs_list=[rub, usd, eur])
+            repeat(60, check_changes, currency_objs_list=currency_objs_list)
         ),
         loop.create_task(
-            web.run_app(get_webserver_settings(currency_objs_list=[rub, usd, eur]), host='127.0.0.1', port=8000)
+            web.run_app(get_webserver_settings(currency_objs_list=currency_objs_list), host='127.0.0.1', port=8000)
         )
 
     ]
