@@ -84,8 +84,6 @@ async def get_amount(request):
     currency_objs_list = request.app['currency_objs_list']
     total_cost_in_rubles = sum(
         list(map(lambda x: x.get_cost_in_rubles(), currency_objs_list)))  ## сумма всех валют в рублях
-    ### TODO: переделать без множества циклов
-    ### TODO: добавить rub-usd....
     response_string = ""
     total_cost_by_currency_list = []
     for currency_obj in currency_objs_list:
@@ -198,7 +196,6 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     tasks = [
         loop.create_task(
-            ### TODO: переделать на wait_for с timeout
             repeat(parsed_script_args.period * 60, fetch_exchange_rates,
                    currency_objs_list=currency_objs_list_without_RUB)
         ),
