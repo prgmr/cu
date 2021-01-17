@@ -92,17 +92,23 @@ async def get_currency_name(request):
     current_currency = next(filter(lambda x: x.name == req_currency_name, currency_objs_list), None)
     if current_currency is None:
         return web.Response(text=f'Unknown currency: {req_currency_name}', status=403)
-    return web.json_response(
-        {"Currency": current_currency.name, "Amount": current_currency.amount, "Cost": current_currency.cost})
+    response = {
+        "Currency": current_currency.name,
+        "Amount": current_currency.amount,
+        "Cost": current_currency.cost
+    }
+    logger.debug(f"request={request.path} response={response}")
+    return web.json_response(response)
 
 
 @routes.post('/amount/set')
 async def set_amount(request):
     request_body = await request.json()
     if not request_body:
+        logger.warning(f"{request.path}:{request_body} Unknown request")
         return web.Response(text=f'Unknown request', status=403)
     currency_objs_list = request.app['currency_objs_list']
-    response = ''
+    response = {}
     for key, value in request_body.items():
         for currency_obj in currency_objs_list:
             if key.upper() == currency_obj.name:
@@ -110,8 +116,9 @@ async def set_amount(request):
                 currency_obj.is_changed = True
 
     for currency_obj in currency_objs_list:
-        response += f"{currency_obj}\n"
+        response[currency_obj.name] = currency_obj.amount
 
+    logger.debug(f"request={request.path}:{request_body} response={response}")
     return web.json_response(response)
 
 
@@ -119,18 +126,20 @@ async def set_amount(request):
 async def set_amount(request):
     request_body = await request.json()
     if not request_body:
+        logger.warning(f"{request.path}:{request_body} Unknown request")
         return web.Response(text=f'Unknown request', status=403)
     currency_objs_list = request.app['currency_objs_list']
-    response = ''
-    for k, v in request_body.items():
+    response = {}
+    for key, value in request_body.items():
         for currency_obj in currency_objs_list:
-            if k.upper() == currency_obj.name:
-                currency_obj.amount += v
+            if key.upper() == currency_obj.name:
+                currency_obj.amount += value
                 currency_obj.is_changed = True
 
     for currency_obj in currency_objs_list:
-        response += f"{currency_obj}\n"
+        response[currency_obj.name] = currency_obj.amount
 
+    logger.debug(f"request={request.path}:{request_body} response={response}")
     return web.json_response(response)
 
 
