@@ -41,6 +41,13 @@ async def fetch_exchange_rates(**kwargs):
                     currency_obj.cost = parsed_valute_cost
 
 
+async def check_changes(**kwargs):
+    currency_objs_list = kwargs.get('currency_objs_list')
+    for currency_obj in currency_objs_list:
+        if currency_obj.is_changed:
+            currency_obj.is_changed = False
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--period', action="store", dest="period", required=True, type=int,
@@ -63,6 +70,9 @@ if __name__ == '__main__':
         loop.create_task(
             repeat(parsed_script_args.period * 60, fetch_exchange_rates, currency_objs_list=[usd, eur])
         ),
+        loop.create_task(
+            repeat(60, check_changes, currency_objs_list=[rub, usd, eur])
+        )
 
     ]
     loop.run_until_complete(asyncio.gather(*tasks))
