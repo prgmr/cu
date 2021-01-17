@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from itertools import combinations
 
 import aiohttp
 from aiohttp import web
@@ -68,21 +69,34 @@ routes = web.RouteTableDef()
 
 @routes.get('/')
 async def index(request):
-    return web.json_response({"status": "OK"})
+    currency_objs_list = request.app['currency_objs_list']
+    response = ''
+    for currency_obj in currency_objs_list:
+        response += f"GET http://{request.host}/{currency_obj.name}/get\n"
+    response += f"GET http://{request.host}/amount/get\n"
+    response += f"POST http://{request.host}/amount/set\n"
+    response += f"POST http://{request.host}/modify\n"
+    return web.Response(text=response)
 
 
 @routes.get('/amount/get')
 async def get_amount(request):
     currency_objs_list = request.app['currency_objs_list']
-    total_cost_in_rubles = sum(list(map(lambda x: x.get_cost_in_rubles(), currency_objs_list)))
+    total_cost_in_rubles = sum(
+        list(map(lambda x: x.get_cost_in_rubles(), currency_objs_list)))  ## сумма всех валют в рублях
     ### TODO: переделать без множества циклов
     ### TODO: добавить rub-usd....
     response_string = ""
+    total_cost_by_currency_list = []
     for currency_obj in currency_objs_list:
         response_string += f"{currency_obj.name}: {currency_obj.amount}\n"
-    response_string += f"sum: "
-    for currency_obj in currency_objs_list:
-        response_string += f"/ {round(total_cost_in_rubles / currency_obj.cost, 2)} {currency_obj.name}"
+        total_cost_by_currency_list.append(f"{round(total_cost_in_rubles / currency_obj.cost, 2)} {currency_obj.name}")
+    response_string += '\n'
+    for objs_tuple in combinations(currency_objs_list, 2):  ## ищем комбинации по 2 элемента
+        response_string += f"{objs_tuple[0].name}-{objs_tuple[1].name}: {round(objs_tuple[1].cost / objs_tuple[0].cost, 2)}\n"
+
+    response_string += f"\nsum: / " + " / ".join(total_cost_by_currency_list)
+    logger.debug(f"{request.path} response={response_string}")
     return web.Response(text=response_string, content_type='text/plain')
 
 
