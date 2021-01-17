@@ -48,7 +48,7 @@ async def fetch_exchange_rates(**kwargs):
                     del currency_obj
                 if currency_obj.cost is None:  ## меняем первоначальное состояние
                     currency_obj.cost = parsed_valute_cost
-                    return
+                    continue
                 if parsed_valute_cost != currency_obj.cost:  ## если курс изменился
                     currency_obj.is_changed = True
                     currency_obj.cost = parsed_valute_cost
