@@ -21,7 +21,7 @@ class Currency(Money):
         Money.__init__(self, name, amount)
 
 
-def check_url(url):
+def check_for_alive_url(url):
     r = requests.head(url)
     return r.status_code == 200
 
@@ -34,31 +34,36 @@ async def repeat(interval, func, *args, **kwargs):
         )
 
 
+async def fetch_url(url):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            return await response.json(content_type='application/javascript')
+
+
 async def fetch_exchange_rates(**kwargs):
     currency_objs_list = kwargs.get('currency_objs_list')
     if currency_objs_list is None or not currency_objs_list:
         return
-    async with aiohttp.ClientSession() as session:
-        async with session.get(URL_JSON, allow_redirects=True) as response:
-            json_data = await response.json(content_type='application/javascript')
-            if not json_data:
-                logger.critical(f"No data from {URL_JSON}")
-                return
-            logging.info(f"Successful fetch data from {URL_JSON}")
-            for currency_obj in currency_objs_list:
-                try:
-                    parsed_valute_cost = json_data['Valute'][currency_obj.name.upper()]['Value']
-                except:
-                    ### удаляем валюту, если такой не существует
-                    currency_objs_list.remove(currency_obj)
-                    del currency_obj
-                if currency_obj.cost is None:  ## меняем первоначальное состояние
-                    currency_obj.cost = parsed_valute_cost
-                    continue
-                if parsed_valute_cost != currency_obj.cost:  ## если курс изменился
-                    currency_obj.is_changed = True
-                    currency_obj.cost = parsed_valute_cost
-                    logger.info(f"New exchange rate for {currency_obj.name} is {parsed_valute_cost}")
+    json_data = await fetch_url(URL_JSON)
+    if not json_data:
+        logger.critical(f"No data from {URL_JSON}")
+        return
+    logging.info(f"Successful fetch data from {URL_JSON}")
+    for currency_obj in currency_objs_list:
+        try:
+            parsed_valute_cost = json_data['Valute'][currency_obj.name.upper()]['Value']
+        except:
+            ### удаляем валюту, если такой не существует
+            currency_objs_list.remove(currency_obj)
+            del currency_obj
+        else:
+            if currency_obj.cost is None:  ## меняем первоначальное состояние
+                currency_obj.cost = parsed_valute_cost
+                continue
+            if parsed_valute_cost != currency_obj.cost:  ## если курс изменился
+                currency_obj.is_changed = True
+                currency_obj.cost = parsed_valute_cost
+                logger.info(f"New exchange rate for {currency_obj.name} is {parsed_valute_cost}")
 
 
 async def check_changes(**kwargs):
@@ -177,7 +182,7 @@ if __name__ == '__main__':
     parser.add_argument('--period', action="store", dest="period", required=True, type=int,
                         help='update period in minutes')
     parser.add_argument('--debug', dest="debug", default=False,
-                        type=lambda x: (str(x).lower() in ['true', '1', 'y', 'yes']),
+                        type=lambda x: (str(x).lower() in ['true', '1', 'y', 'yes', 'on']),
                         help='debug enable mode')
     for currency_arg in catched_currencies_list:
         cur_name = currency_arg[2:]
@@ -199,7 +204,7 @@ if __name__ == '__main__':
     currency_objs_list_without_RUB = list(filter(lambda x: x.name != 'RUB', currency_objs_list))
 
     url = URL_JSON
-    if not check_url(url):
+    if not check_for_alive_url(url):
         logger.critical(f"ping {url} fail")
         sys.exit(1)
 
