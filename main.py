@@ -5,11 +5,11 @@ import sys
 from itertools import combinations
 
 import aiohttp
+import requests
 from aiohttp import web
 
 from money import Money
 
-URL_XML = "https://www.cbr-xml-daily.ru/daily_utf8.xml"
 URL_JSON = 'https://www.cbr-xml-daily.ru/daily_json.js'
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 class Currency(Money):
     def __init__(self, name, amount=None):
         Money.__init__(self, name, amount)
+
+
+def check_url(url):
+    r = requests.head(url)
+    return r.status_code == 200
 
 
 async def repeat(interval, func, *args, **kwargs):
@@ -34,7 +39,7 @@ async def fetch_exchange_rates(**kwargs):
     if currency_objs_list is None or not currency_objs_list:
         return
     async with aiohttp.ClientSession() as session:
-        async with session.get(URL_JSON, allow_redirects=True, ssl=False) as response:
+        async with session.get(URL_JSON, allow_redirects=True) as response:
             json_data = await response.json(content_type='application/javascript')
             if not json_data:
                 logger.critical(f"No data from {URL_JSON}")
@@ -192,6 +197,11 @@ if __name__ == '__main__':
         cur_name = currency_arg[2:]
         currency_objs_list.append(Currency(name=cur_name, amount=parsed_script_args_dict[cur_name]))
     currency_objs_list_without_RUB = list(filter(lambda x: x.name != 'RUB', currency_objs_list))
+
+    url = URL_JSON
+    if not check_url(url):
+        logger.critical(f"ping {url} fail")
+        sys.exit(1)
 
     loop = asyncio.get_event_loop()
     tasks = [
