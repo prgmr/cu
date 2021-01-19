@@ -41,19 +41,17 @@ async def fetch_url(url):
 
 
 async def fetch_exchange_rates(**kwargs):
+    url = kwargs.get('url')
     currency_objs_list = kwargs.get('currency_objs_list')
     if currency_objs_list is None or not currency_objs_list:
         return
-    json_data = await fetch_url(URL_JSON)
-    if not json_data:
-        logger.critical(f"No data from {URL_JSON}")
-        return
-    logging.info(f"Successful fetch data from {URL_JSON}")
+    json_data = await fetch_url(url)
+    logging.info(f"Successful fetch data from {url}")
     for currency_obj in currency_objs_list:
         try:
             parsed_valute_cost = json_data['Valute'][currency_obj.name.upper()]['Value']
         except:
-            ### удаляем валюту, если такой не существует
+            ### удаляем валюту, если передали некорректный аргумент
             currency_objs_list.remove(currency_obj)
             del currency_obj
         else:
@@ -209,18 +207,21 @@ if __name__ == '__main__':
         sys.exit(1)
 
     loop = asyncio.get_event_loop()
-    tasks = [
-        loop.create_task(
-            repeat(parsed_script_args.period * 60, fetch_exchange_rates,
-                   currency_objs_list=currency_objs_list_without_RUB)
-        ),
-        loop.create_task(
-            repeat(60, check_changes, currency_objs_list=currency_objs_list)
-        ),
-        loop.create_task(
-            web.run_app(get_webserver_settings(currency_objs_list=currency_objs_list), host='127.0.0.1', port=8000)
-        )
-
-    ]
-    loop.run_until_complete(asyncio.gather(*tasks))
-    loop.close()
+    try:
+        tasks = [
+            loop.create_task(
+                repeat(parsed_script_args.period * 60, fetch_exchange_rates,
+                       currency_objs_list=currency_objs_list_without_RUB, url=url)
+            ),
+            loop.create_task(
+                repeat(60, check_changes, currency_objs_list=currency_objs_list)
+            ),
+            loop.create_task(
+                web.run_app(get_webserver_settings(currency_objs_list=currency_objs_list), host='127.0.0.1', port=8000)
+            )
+        ]
+        loop.run_until_complete(asyncio.gather(*tasks))
+    except Exception as e:
+        logger.critical(f"{e}")
+    finally:
+        loop.close()
